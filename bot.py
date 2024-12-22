@@ -2,6 +2,8 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+import os
 import time
 import random
 import threading
@@ -9,22 +11,34 @@ import threading
 # Configuração do Selenium (modo headless)
 def setup_driver():
     options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(options=options)
+    options.add_argument("--headless")  # Não abre janelas
+    options.add_argument("--disable-gpu")  # Evita uso de GPU
+    options.add_argument("--no-sandbox")  # Necessário para ambientes Linux
+    options.add_argument("--disable-dev-shm-usage")  # Usa memória compartilhada
+    options.add_argument("--log-level=3")  # Reduz logs desnecessários
+    options.add_argument("--window-size=1920,1080")  # Simula uma tela
+    options.binary_location = "/usr/bin/google-chrome"  # Local do Chrome no servidor
+
+    service = Service("/usr/bin/chromedriver")  # Local do ChromeDriver
+    return webdriver.Chrome(service=service, options=options)
 
 # Função para assistir a um único vídeo
 def assistir_video(link):
+    print(f"Iniciando o vídeo: {link}")
     driver = setup_driver()
     try:
         driver.get(link)
         time.sleep(random.uniform(3, 5))  # Aguarde o carregamento inicial
+
+        # Verifica se o elemento do vídeo está disponível
+        video_element = driver.find_element("tag name", "video")
+        if not video_element:
+            raise Exception("Elemento de vídeo não encontrado")
+
         video_duration = driver.execute_script("return document.querySelector('video').duration")
         print(f"Assistindo vídeo de {video_duration} segundos.")
-        time.sleep(video_duration)  # Assiste ao vídeo completo
-        print(f"Vídeo assistido: {link}")
+        time.sleep(video_duration)  # Simula assistir ao vídeo
+        print(f"Vídeo assistido com sucesso: {link}")
     except Exception as e:
         print(f"Erro ao assistir o vídeo {link}: {e}")
     finally:
@@ -106,7 +120,11 @@ def executar_automacao(links):
 
 # Configurar o bot
 def main():
-    api_key = "7705193101:AAFiereuwtKfY0ipBVSdTDixwDtHHdQIyOo"
+    api_key = os.getenv("BOT_API_KEY")  # Pegando a API Key do bot de uma variável de ambiente
+    if not api_key:
+        print("Erro: Chave da API do Telegram não configurada!")
+        return
+
     application = ApplicationBuilder().token(api_key).build()
 
     # Adicionar comandos e handlers
