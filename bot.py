@@ -3,52 +3,120 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.proxy import Proxy, ProxyType
 import os
 import time
 import random
 import threading
+import requests
+from fake_useragent import UserAgent
 
-# Configuração do Selenium (modo headless)
-def setup_driver():
+from dotenv import load_dotenv
+import os
+load_dotenv()
+# Obter proxies dinâmicos de uma API
+def get_proxy_from_api():
+    response = requests.get("https://proxylist.geonode.com/api/proxy-list?limit=10&page=1&sort_by=lastChecked&sort_type=desc&protocols=http")
+    if response.status_code == 200:
+        proxies = response.json().get("data", [])
+        if proxies:
+            proxy = random.choice(proxies)
+            return f"{proxy['ip']}:{proxy['port']}"
+    return None
+
+# Alternativa: Proxies estáticos
+def get_static_proxy():
+    proxies = [
+        "192.168.1.100:8080",
+        "192.168.1.101:8080",
+        "192.168.1.102:8080"
+    ]
+    return random.choice(proxies)
+
+# Configuração do Selenium com proxies e User-Agent
+def setup_driver(proxy):
     options = Options()
+    ua = UserAgent()
+    user_agent = ua.random  # Gerar um novo User-Agent aleatório
+
+    options.add_argument(f"user-agent={user_agent}")
     options.add_argument("--headless")  # Não abre janelas
-    options.add_argument("--disable-gpu")  # Evita uso de GPU
-    options.add_argument("--no-sandbox")  # Necessário para ambientes Linux
-    options.add_argument("--disable-dev-shm-usage")  # Usa memória compartilhada
-    options.add_argument("--log-level=3")  # Reduz logs desnecessários
-    options.add_argument("--window-size=1920,1080")  # Simula uma tela
-    options.binary_location = "/usr/bin/google-chrome"  # Local do Chrome no servidor
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
 
-    service = Service("/usr/bin/chromedriver")  # Local do ChromeDriver
-    return webdriver.Chrome(service=service, options=options)
+    proxy_config = Proxy()
+    proxy_config.proxy_type = ProxyType.MANUAL
+    proxy_config.http_proxy = proxy
+    proxy_config.ssl_proxy = proxy
+    capabilities = webdriver.DesiredCapabilities.CHROME
+    proxy_config.add_to_capabilities(capabilities)
 
-# Função para assistir a um único vídeo
-def assistir_video(link):
+    service = Service("/usr/bin/chromedriver")
+    return webdriver.Chrome(service=service, options=options, desired_capabilities=capabilities)
+
+# Função para assistir a um único vídeo por um período determinado
+def assistir_video(link, duracao_desejada):
     print(f"Iniciando o vídeo: {link}")
-    driver = setup_driver()
+    proxy = get_proxy_from_api() or get_static_proxy()
+    print(f"Usando proxy: {proxy}")
+    driver = setup_driver(proxy)
+
     try:
         driver.get(link)
         time.sleep(random.uniform(3, 5))  # Aguarde o carregamento inicial
 
-        # Verifica se o elemento do vídeo está disponível
-        video_element = driver.find_element("tag name", "video")
-        if not video_element:
-            raise Exception("Elemento de vídeo não encontrado")
+        # Simula ações humanas como movimentar o mouse ou pressionar teclas
+        driver.execute_script("window.scrollTo(0, 100);")  # Rolar para baixo
+        time.sleep(random.uniform(1, 3))
+        driver.execute_script("window.scrollTo(0, 0);")    # Rolar para cima
 
-        video_duration = driver.execute_script("return document.querySelector('video').duration")
-        print(f"Assistindo vídeo de {video_duration} segundos.")
-        time.sleep(video_duration)  # Simula assistir ao vídeo
-        print(f"Vídeo assistido com sucesso: {link}")
+        total_assistido = 0
+        while total_assistido < duracao_desejada * 3600:  # Transformar horas em segundos
+            time.sleep(random.uniform(10, 20))  # Pausas aleatórias entre interações
+            total_assistido += 30  # Simulando 30 segundos assistidos por iteração
+
+        print(f"Finalizado: {link}")
     except Exception as e:
         print(f"Erro ao assistir o vídeo {link}: {e}")
     finally:
         driver.quit()
 
-# Função para calcular o tempo e os dias necessários
-def calcular_tempo(horas_desejadas, duracao_total_segundos):
-    total_segundos = horas_desejadas * 3600
-    repeticoes = total_segundos / duracao_total_segundos
-    return repeticoes
+# Função para simular várias pessoas assistindo aos vídeos simultaneamente
+def gerar_400_pessoas_assistindo(links, duracao_desejada):
+    num_threads = 400  # Simular 400 "pessoas"
+    threads = []
+
+    for _ in range(num_threads):
+        for link in links:
+            thread = threading.Thread(target=assistir_video, args=(link, duracao_desejada))
+            threads.append(thread)
+            thread.start()
+
+    for thread in threads:
+        thread.join()
+
+# Função para calcular a duração estimada da tarefa e o total de horas acumuladas
+def calcular_duracao_e_horas(links, num_pessoas):
+    total_duracao = 0  # Total da duração dos vídeos (em segundos)
+
+    for link in links:
+        try:
+            driver = setup_driver(get_static_proxy())
+            driver.get(link)
+            time.sleep(random.uniform(3, 5))  # Aguardar carregamento inicial
+            duracao = driver.execute_script("return document.querySelector('video').duration")
+            total_duracao += duracao
+            driver.quit()
+        except Exception as e:
+            print(f"Erro ao obter a duração do vídeo {link}: {e}")
+
+    tempo_acumulado = total_duracao * num_pessoas
+    horas_acumuladas = tempo_acumulado / 3600
+    duracao_total_em_horas = total_duracao / 3600
+
+    return duracao_total_em_horas, horas_acumuladas
 
 # Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,71 +124,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Olá! Envie os links dos vídeos do YouTube separados por espaços ou em uma lista, junto com a quantidade de horas desejadas (exemplo: 4000)."
     )
 
-# Receber links e horas desejadas
+# Receber links e processar a tarefa
 async def processar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         mensagem = update.message.text
-        partes = mensagem.splitlines()  # Divide a mensagem em linhas
+        partes = mensagem.splitlines()
         links = [parte.strip() for parte in partes if parte.startswith("http")]
 
         if not links:
             await update.message.reply_text("Por favor, envie ao menos um link de vídeo.")
             return
 
-        # Extrai o número de horas desejadas
-        horas_desejadas = None
-        for linha in partes:
-            try:
-                horas_desejadas = int(linha.strip())
-                break
-            except ValueError:
-                continue
+        # Número de "pessoas" simuladas
+        num_pessoas = 400
 
-        if horas_desejadas is None:
-            await update.message.reply_text("Por favor, envie também a quantidade de horas desejadas como um número.")
-            return
-
-        # Simular duração de vídeos (cada vídeo com 16 minutos, por exemplo)
-        duracao_total_segundos = len(links) * 16 * 60
-
-        # Calcular repetição e tempo
-        repeticoes = calcular_tempo(horas_desejadas, duracao_total_segundos)
-        dias_necessarios = repeticoes / 3  # Limite de 3 execuções por dia
+        # Calcula duração estimada e horas acumuladas
+        duracao_total, horas_acumuladas = calcular_duracao_e_horas(links, num_pessoas)
 
         resposta = (
-            f"Para atingir {horas_desejadas} horas assistidas com {len(links)} vídeos:\n"
-            f"- Você precisará assistir aos vídeos {int(repeticoes)} vezes.\n"
-            f"- Isso levará aproximadamente {int(dias_necessarios)} dias, assistindo 3 vezes ao dia.\n"
+            f"📺 Total de vídeos: {len(links)}\n"
+            f"👥 Simulações de pessoas: {num_pessoas}\n"
+            f"⏳ Duração estimada da tarefa: {duracao_total:.2f} horas\n"
+            f"🕒 Horas acumuladas (simulação): {horas_acumuladas:.2f} horas\n\n"
+            "Iniciando a simulação de 400 pessoas assistindo aos vídeos. Por favor, aguarde..."
         )
-
-        # Aviso sobre penalidade no YouTube
-        aviso = (
-            "\u26A0\ufe0f *Importante*: Para evitar penalidades no YouTube, execute o bot no máximo 3 vezes por dia, "
-            "com pausas de pelo menos 6 a 8 horas entre as execuções.\n"
-            "Evite comportamentos repetitivos excessivos para manter sua conta segura."
-        )
-        resposta += aviso
-
-        await update.message.reply_text(resposta, parse_mode="Markdown")
-
-        # Informa o início do processo
-        await update.message.reply_text("O processo de assistir os vídeos foi iniciado. Aguarde enquanto os vídeos são executados.")
+        await update.message.reply_text(resposta)
 
         # Inicia a automação em outra thread
-        threading.Thread(target=executar_automacao, args=(links,)).start()
+        threading.Thread(target=gerar_400_pessoas_assistindo, args=(links, duracao_total)).start()
 
     except Exception as e:
         await update.message.reply_text(f"Erro: {e}")
 
-# Função para assistir vídeos
-def executar_automacao(links):
-    for link in links:
-        assistir_video(link)
-        time.sleep(random.uniform(5, 10))  # Pausa entre os vídeos
-
 # Configurar o bot
 def main():
-    api_key = os.getenv("BOT_API_KEY")  # Pegando a API Key do bot de uma variável de ambiente
+    api_key = os.getenv("TELEGRAM_API_KEY")  # Pegando a API Key do bot de uma variável de ambiente
     if not api_key:
         print("Erro: Chave da API do Telegram não configurada!")
         return
