@@ -1,81 +1,93 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.proxy import Proxy, ProxyType
-import os
-import time
 import random
-import threading
 import requests
+from selenium import webdriver
+import threading
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
+import time
 from fake_useragent import UserAgent
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager  # Importação do WebDriver Manager
 
-from dotenv import load_dotenv
-import os
-load_dotenv()
-# Obter proxies dinâmicos de uma API
-def get_proxy_from_api():
-    response = requests.get("https://proxylist.geonode.com/api/proxy-list?limit=10&page=1&sort_by=lastChecked&sort_type=desc&protocols=http")
-    if response.status_code == 200:
-        proxies = response.json().get("data", [])
-        if proxies:
-            proxy = random.choice(proxies)
-            return f"{proxy['ip']}:{proxy['port']}"
-    return None
+# Lista de proxies fornecidos no formato IP:PORT:USER:PASS
+PROXIES = [
+    "194.38.18.51:7113:ALICCEEE:PPROXYSS",
+    "92.112.175.239:6512:ALICCEEE:PPROXYSS",
+    "91.123.8.130:6670:ALICCEEE:PPROXYSS",
+    "185.72.241.146:7438:ALICCEEE:PPROXYSS",
+    "91.123.8.91:6631:ALICCEEE:PPROXYSS",
+    "85.198.47.68:6336:ALICCEEE:PPROXYSS",
+    "92.112.202.209:6793:ALICCEEE:PPROXYSS",
+    "23.129.253.227:6845:ALICCEEE:PPROXYSS",
+    "185.72.240.73:7109:ALICCEEE:PPROXYSS",
+    "91.123.11.196:6462:ALICCEEE:PPROXYSS",
+    "92.112.202.187:6771:ALICCEEE:PPROXYSS",
+    "194.38.18.169:7231:ALICCEEE:PPROXYSS",
+    "91.123.10.193:6735:ALICCEEE:PPROXYSS",
+    "92.113.245.138:5824:ALICCEEE:PPROXYSS",
+    "185.72.241.8:7300:ALICCEEE:PPROXYSS",
+    "23.129.253.235:6853:ALICCEEE:PPROXYSS",
+    "92.113.245.118:5804:ALICCEEE:PPROXYSS",
+    "85.198.45.30:5954:ALICCEEE:PPROXYSS",
+    "92.112.175.145:6418:ALICCEEE:PPROXYSS",
+    "85.198.45.127:6051:ALICCEEE:PPROXYSS",
+    "185.72.241.53:7345:ALICCEEE:PPROXYSS",
+    "45.91.166.80:7139:ALICCEEE:PPROXYSS",
+    "92.112.171.24:5992:ALICCEEE:PPROXYSS",
+    "185.72.240.10:7046:ALICCEEE:PPROXYSS",
+    "92.112.172.11:6283:ALICCEEE:PPROXYSS",
+    "92.113.244.233:5920:ALICCEEE:PPROXYSS",
+    "92.112.170.174:6143:ALICCEEE:PPROXYSS",
+    "185.72.242.11:5694:ALICCEEE:PPROXYSS",
+    "92.112.202.170:6754:ALICCEEE:PPROXYSS",
+    "45.91.167.96:6655:ALICCEEE:PPROXYSS"
+]
 
-# Alternativa: Proxies estáticos
-def get_static_proxy():
-    proxies = [
-        "192.168.1.100:8080",
-        "192.168.1.101:8080",
-        "192.168.1.102:8080"
-    ]
-    return random.choice(proxies)
-
-# Configuração do Selenium com proxies e User-Agent
+# Configuração do Selenium com proxies autenticados
 def setup_driver(proxy):
     options = Options()
     ua = UserAgent()
-    user_agent = ua.random  # Gerar um novo User-Agent aleatório
+    user_agent = ua.random
 
+    # Configuração do User-Agent
     options.add_argument(f"user-agent={user_agent}")
-    options.add_argument("--headless")  # Não abre janelas
+    options.add_argument("--headless")  # Omitir a interface gráfica para performance
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
 
-    proxy_config = Proxy()
-    proxy_config.proxy_type = ProxyType.MANUAL
-    proxy_config.http_proxy = proxy
-    proxy_config.ssl_proxy = proxy
-    capabilities = webdriver.DesiredCapabilities.CHROME
-    proxy_config.add_to_capabilities(capabilities)
+    # Extraindo dados do proxy no formato IP:PORT:USER:PASS
+    ip, port, user, password = proxy.split(":")
+    proxy_url = f"http://{user}:{password}@{ip}:{port}"
 
-    service = Service("/usr/bin/chromedriver")
-    return webdriver.Chrome(service=service, options=options, desired_capabilities=capabilities)
+    # Configurar proxy
+    options.add_argument(f"--proxy-server={proxy_url}")
 
-# Função para assistir a um único vídeo por um período determinado
-def assistir_video(link, duracao_desejada):
-    print(f"Iniciando o vídeo: {link}")
-    proxy = get_proxy_from_api() or get_static_proxy()
-    print(f"Usando proxy: {proxy}")
+    # Usando o WebDriver Manager para obter o ChromeDriver
+    driver_path = ChromeDriverManager().install()
+    service = Service(driver_path)
+    return webdriver.Chrome(service=service, options=options)
+
+# Simulação de assistir vídeo
+def assistir_video(link, proxy, duracao_desejada):
+    print(f"Iniciando o vídeo: {link} com proxy {proxy}")
     driver = setup_driver(proxy)
 
     try:
         driver.get(link)
-        time.sleep(random.uniform(3, 5))  # Aguarde o carregamento inicial
+        time.sleep(random.uniform(5, 10))  # Aguarda o carregamento completo da página
 
-        # Simula ações humanas como movimentar o mouse ou pressionar teclas
-        driver.execute_script("window.scrollTo(0, 100);")  # Rolar para baixo
+        # Simula interações humanas
+        driver.execute_script("window.scrollTo(0, 100);")
         time.sleep(random.uniform(1, 3))
-        driver.execute_script("window.scrollTo(0, 0);")    # Rolar para cima
+        driver.execute_script("window.scrollTo(0, 0);")
 
         total_assistido = 0
-        while total_assistido < duracao_desejada * 3600:  # Transformar horas em segundos
-            time.sleep(random.uniform(10, 20))  # Pausas aleatórias entre interações
-            total_assistido += 30  # Simulando 30 segundos assistidos por iteração
+        while total_assistido < duracao_desejada * 3600:
+            time.sleep(random.uniform(10, 20))
+            total_assistido += 30
 
         print(f"Finalizado: {link}")
     except Exception as e:
@@ -83,94 +95,26 @@ def assistir_video(link, duracao_desejada):
     finally:
         driver.quit()
 
-# Função para simular várias pessoas assistindo aos vídeos simultaneamente
-def gerar_400_pessoas_assistindo(links, duracao_desejada):
-    num_threads = 400  # Simular 400 "pessoas"
+# Simulação de 30 agentes assistindo a vídeos simultaneamente
+def gerar_30_agentes_assistindo(links, duracao_desejada):
+    num_threads = 30
     threads = []
 
-    for _ in range(num_threads):
-        for link in links:
-            thread = threading.Thread(target=assistir_video, args=(link, duracao_desejada))
-            threads.append(thread)
-            thread.start()
+    for i in range(num_threads):
+        proxy = PROXIES[i % len(PROXIES)]  # Seleciona proxies ciclicamente
+        link = random.choice(links)       # Escolhe aleatoriamente um link
+
+        thread = threading.Thread(target=assistir_video, args=(link, proxy, duracao_desejada))
+        threads.append(thread)
+        thread.start()
 
     for thread in threads:
         thread.join()
 
-# Função para calcular a duração estimada da tarefa e o total de horas acumuladas
-def calcular_duracao_e_horas(links, num_pessoas):
-    total_duracao = 0  # Total da duração dos vídeos (em segundos)
-
-    for link in links:
-        try:
-            driver = setup_driver(get_static_proxy())
-            driver.get(link)
-            time.sleep(random.uniform(3, 5))  # Aguardar carregamento inicial
-            duracao = driver.execute_script("return document.querySelector('video').duration")
-            total_duracao += duracao
-            driver.quit()
-        except Exception as e:
-            print(f"Erro ao obter a duração do vídeo {link}: {e}")
-
-    tempo_acumulado = total_duracao * num_pessoas
-    horas_acumuladas = tempo_acumulado / 3600
-    duracao_total_em_horas = total_duracao / 3600
-
-    return duracao_total_em_horas, horas_acumuladas
-
-# Comando /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Olá! Envie os links dos vídeos do YouTube separados por espaços ou em uma lista, junto com a quantidade de horas desejadas (exemplo: 4000)."
-    )
-
-# Receber links e processar a tarefa
-async def processar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        mensagem = update.message.text
-        partes = mensagem.splitlines()
-        links = [parte.strip() for parte in partes if parte.startswith("http")]
-
-        if not links:
-            await update.message.reply_text("Por favor, envie ao menos um link de vídeo.")
-            return
-
-        # Número de "pessoas" simuladas
-        num_pessoas = 400
-
-        # Calcula duração estimada e horas acumuladas
-        duracao_total, horas_acumuladas = calcular_duracao_e_horas(links, num_pessoas)
-
-        resposta = (
-            f"📺 Total de vídeos: {len(links)}\n"
-            f"👥 Simulações de pessoas: {num_pessoas}\n"
-            f"⏳ Duração estimada da tarefa: {duracao_total:.2f} horas\n"
-            f"🕒 Horas acumuladas (simulação): {horas_acumuladas:.2f} horas\n\n"
-            "Iniciando a simulação de 400 pessoas assistindo aos vídeos. Por favor, aguarde..."
-        )
-        await update.message.reply_text(resposta)
-
-        # Inicia a automação em outra thread
-        threading.Thread(target=gerar_400_pessoas_assistindo, args=(links, duracao_total)).start()
-
-    except Exception as e:
-        await update.message.reply_text(f"Erro: {e}")
-
-# Configurar o bot
-def main():
-    api_key = os.getenv("TELEGRAM_API_KEY")  # Pegando a API Key do bot de uma variável de ambiente
-    if not api_key:
-        print("Erro: Chave da API do Telegram não configurada!")
-        return
-
-    application = ApplicationBuilder().token(api_key).build()
-
-    # Adicionar comandos e handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, processar_mensagem))
-
-    # Iniciar o bot
-    application.run_polling()
-
+# Exemplo de uso
 if __name__ == "__main__":
-    main()
+    links = [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://www.youtube.com/watch?v=3JZ_D3ELwOQ"
+    ]
+    gerar_30_agentes_assistindo(links, 1),
